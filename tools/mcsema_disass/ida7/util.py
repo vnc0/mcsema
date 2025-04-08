@@ -24,10 +24,14 @@ import ida_ua
 import ida_bytes
 import ida_funcs
 import sys
+import ida_ida
 
 _DEBUG_FILE = None
 _DEBUG_PREFIX = ""
-_INFO = idaapi.get_inf_structure()
+
+IS_64BIT = ida_ida.inf_is_64bit()
+PROC_NAME = ida_ida.inf_get_procname()
+FILETYPE = ida_ida.inf_get_filetype()
 
 # Map of the external functions names which does not return to a tuple containing information
 # like the number of agruments and calling convention of the function.
@@ -35,16 +39,16 @@ _NORETURN_EXTERNAL_FUNC = {}
 
 FUNC_LSDA_ENTRIES = collections.defaultdict()
 
-IS_ARM = "ARM" in _INFO.procName
+IS_ARM = "ARM" in PROC_NAME
 
-IS_SPARC = "sparc" in _INFO.procName
+IS_SPARC = "sparc" in PROC_NAME
 
 # True if we are running on an ELF file.
-IS_ELF = (idaapi.f_ELF == _INFO.filetype) or \
+IS_ELF = (idaapi.f_ELF == FILETYPE) or \
          (idc.get_inf_attr(idc.INF_FILETYPE) == idc.FT_ELF)
 
 # True if this is a Windows PE file.
-IS_PE = idaapi.f_PE == _INFO.filetype
+IS_PE = idaapi.f_PE == FILETYPE
 
 if IS_ARM:
   from arm_util import *
@@ -121,7 +125,7 @@ def is_code_by_flags(ea):
   if not is_code(ea):
     return False
 
-  flags = idc.get_full_flags(ea)
+  flags = ida_bytes.get_flags(ea)
   return idc.is_code(flags)
 
 def is_read_only_segment(ea):
@@ -170,8 +174,8 @@ def mark_as_not_code(ea):
 def read_bytes_slowly(start, end):
   bytestr = bytearray()
   for i in xrange(start, end):
-    if idc.has_value(idc.get_full_flags(i)):
-      bt = idc.get_wide_byte(i)
+    if ida_bytes.has_value(ida_bytes.get_flags(i)):
+      bt = ida_bytes.get_byte(i)
       bytestr.append(bt)
     else:
       bytestr.append(0)
@@ -209,7 +213,7 @@ def read_leb128(ea, signed):
   val = 0
   shift = 0
   while True:
-    byte = idc.get_wide_byte(ea)
+    byte = ida_bytes.get_byte(ea)
     val |= (byte & 0x7F) << shift
     shift += 7
     ea += 1
@@ -225,7 +229,7 @@ def read_leb128(ea, signed):
   return val, ea
 
 def read_pointer(ea):
-  if _INFO.is_64bit():
+  if IS_64BIT:
     return read_qword(ea)
   else:
     return read_dword(ea)
@@ -406,7 +410,7 @@ def get_destructor_segment():
   for seg_ea in idautils.Segments():
     seg_name = idc.get_segm_name(seg_ea).lower()
     if seg_name in [".fini_array", ".dtor"]:
-      return seg_ea;
+      return seg_ea
 
 def is_internal_code(ea):
   if is_invalid_ea(ea):
@@ -420,7 +424,7 @@ def is_internal_code(ea):
 
   # find stray 0x90 (NOP) bytes in .text that IDA 
   # thinks are data items.
-  flags = idc.get_full_flags(ea)
+  flags = ida_bytes.get_flags(ea)
   if idaapi.is_align(flags):
     if not try_mark_as_code(ea):
       return False
@@ -435,8 +439,7 @@ def is_block_or_instruction_head(ea):
 
 def get_address_size_in_bits():
   """Returns the available address size."""
-  global _INFO
-  if _INFO.is_64bit():
+  if IS_64BIT:
     return 64
   else:
     return 32
@@ -465,7 +468,7 @@ def get_symbol_name(from_ea, ea=None, allow_dummy=False):
   if ea in _FORCED_NAMES:
     return _FORCED_NAMES[ea]
 
-  flags = idc.get_full_flags(ea)
+  flags = ida_bytes.get_flags(ea)
   if not allow_dummy and idaapi.has_dummy_name(flags):
     return ""
 
@@ -570,7 +573,7 @@ _DREFS_TO = collections.defaultdict(set)
 
 def make_dref(from_ea, to_ea, data_type, xref_size):
   """Force the data at `from_ea` to reference the data at `to_ea`."""
-  if not idc.get_full_flags(to_ea) or is_invalid_ea(to_ea):
+  if not ida_bytes.get_flags(to_ea) or is_invalid_ea(to_ea):
     DEBUG("  Not making reference (A) from {:x} to {:x}".format(from_ea, to_ea))
     return False
 
@@ -667,7 +670,7 @@ def drefs_from(ea, only_one=False, check_fixup=True):
         return
 
 def crefs_from(ea, only_one=False, check_fixup=True):
-  flags = idc.get_full_flags(ea)
+  flags = ida_bytes.get_flags(ea)
   if not idc.is_code(flags):
     return
 
