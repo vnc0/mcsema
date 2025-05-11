@@ -80,6 +80,8 @@ DECLARE_uint32(explicit_args_count);
 DEFINE_bool(list_supported, false, "List instructions that can be lifted.");
 DEFINE_bool(legacy_mode, false,
             "Try to make the output bitcode resemble the original McSema.");
+DEFINE_bool(ignore_unsupported, false, 
+            "Silently ignore unsupported instructions during lifting.");
 
 namespace {
 
@@ -650,6 +652,8 @@ int main(int argc, char *argv[]) {
      // `__gxx_personality_v0` for libstdc++ and `__gnat_personality_v0` for ADA ABIs.
      << "    [--exception_personality_func]"
      << std::endl
+
+     << "    [--ignore_unsupported] \\" << std::endl
 
      // Print the version and exit.
      << "    [--version]"
