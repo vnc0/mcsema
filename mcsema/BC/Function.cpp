@@ -528,6 +528,19 @@ FindFunction(TranslationContext &ctx, uint64_t target_pc,
   return {nullptr, nullptr};
 }
 
+static bool IsPaddingPattern(const std::vector<char>& bytes) {
+  if (bytes.empty()) return false;
+  bool all_zeros = true;
+  for (char byte : bytes) {
+    if (byte != 0) {
+      all_zeros = false;
+      break;
+    }
+  }
+  if (all_zeros) return true;
+  return false;
+}
+
 // Try to decode an instruction.
 static bool TryDecodeInstruction(TranslationContext &ctx, uint64_t pc,
                                  bool is_delayed) {
@@ -556,6 +569,14 @@ static bool TryDecodeInstruction(TranslationContext &ctx, uint64_t pc,
     } else {
       inst_bytes.push_back(static_cast<char>(remill::GetReference(maybe_val)));
     }
+  }
+
+  if (IsPaddingPattern(inst_bytes)) {
+    // Mark this as a special no-op instruction rather than an error
+    LOG(INFO) << "Detected padding at " << std::hex << pc << std::dec 
+              << ", treating as end of function";
+    inst.category = remill::Instruction::kCategoryNoOp;
+    return true;
   }
 
   if (is_delayed) {
